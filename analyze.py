@@ -12,6 +12,7 @@ from request import DuplicateEvent
 LOG_LOCATION = '/tmp/log_analyzer.out.{}'.format(os.getpid())
 LOG_FMT = ('Endpoint: {}\tTotal Requests: {}\t'
            'Average Request Time: {}\tMedian Request Time: {}')
+MAX_SERVERS = 10000 
 
 def summarize_all(servers):
     if not servers:
@@ -28,8 +29,8 @@ def summarize_some(servers):
     for s in servers.itervalues():
         id, num_req, avg_req_time, med_req_time  = s.summarize()
         server_list.append((id, num_req, avg_req_time, med_req_time))
-    busiest = sorted(server_list, cmp=lambda x,y: cmp(y[1], x[1]))[:6]
-    slowest = sorted(server_list, cmp=lambda x,y: cmp(y[2], x[2]))[:6]
+    busiest = sorted(server_list, cmp=lambda x,y: cmp(y[1], x[1]))[:5]
+    slowest = sorted(server_list, cmp=lambda x,y: cmp(y[2], x[2]))[:5]
     print '====5 Busiest Endpoints===='
     for b in busiest:
         print LOG_FMT.format(*b)
@@ -37,6 +38,16 @@ def summarize_some(servers):
     for s in slowest:
         print LOG_FMT.format(*s)
     print
+
+def pop_least_active_server(servers):
+    lowest_inflight = None
+    least_active = None
+    for s_id, s in servers.iteritems():
+        num_inflight = s.get_num_inflight()
+        if not lowest_inflight or num_inflight < lowest_inflight:
+            lowest_inflight = s.get_num_inflight()
+            least_active = s_id
+    servers.pop(least_active)
 
 def main():
     last_summary = time.time()
@@ -52,6 +63,8 @@ def main():
                 sys.stderr.write('Invalid log format: {}'.format(line))
                 continue
             if endpoint not in servers:
+                if len(servers) >= MAX_SERVERS:
+                    pop_least_active_server(servers)
                 servers[endpoint] = Server(endpoint)
             timestamp = float(timestamp)
             endpoint = endpoint.strip()
